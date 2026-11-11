@@ -52,8 +52,10 @@ jobs:
         # libegl/libgl + the xcb set: what PySide6 needs to even load its
         # platform plugins on a bare runner (same list as release.yml).
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
+          # Hosted runners already carry package indexes. Avoid an unbounded
+          # mirror refresh while keeping the same runtime dependencies.
+          sudo apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=20 \
+            -o Acquire::https::Timeout=20 install -y --no-install-recommends \
             libegl1 libgl1 libxkbcommon-x11-0 \
             libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0
 
