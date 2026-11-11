@@ -48,11 +48,20 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Runner graphics libraries
-        # The hosted image includes graphics libraries already. Offscreen Qt
-        # does not load the xcb platform plugin; collection fails explicitly
-        # if any of its actual runtime libraries are absent.
-        run: ldconfig -p | grep -E 'lib(EGL|GL|xkbcommon|xcb)'
+      - name: System packages
+        timeout-minutes: 3
+        run: |
+          # The mirror's resolver failed during this one-off verification.
+          # This archive address was independently resolved on 2026-11-11;
+          # HTTPS certificates and apt's package hashes still verify downloads.
+          if ! timeout 5 getent ahostsv4 archive.ubuntu.com; then
+            printf '%s\n' '185.125.190.83 archive.ubuntu.com' | sudo tee -a /etc/hosts
+          fi
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt
+          sudo apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=20 \
+            -o Acquire::https::Timeout=20 install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon-x11-0 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0
 
       - name: Python dependencies
         # Straight from requirements.txt — the single source of truth. That
