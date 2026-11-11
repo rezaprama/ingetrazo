@@ -11,12 +11,12 @@
 # "not slow" marker), minus everything packaging-related: no pyinstaller, no
 # fuse/appimagetool, no xvfb — the tests that need Qt set (or we export)
 # QT_QPA_PLATFORM=offscreen, so no display is required.
-name: ci
+name: verify exact mesh copy
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [ci/verify-exact-mesh-copy]
   workflow_dispatch:        # manual runs from the Actions tab
 
 # A force-push to a PR branch cancels the now-obsolete run instead of
