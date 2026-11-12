@@ -11,12 +11,12 @@
 # "not slow" marker), minus everything packaging-related: no pyinstaller, no
 # fuse/appimagetool, no xvfb — the tests that need Qt set (or we export)
 # QT_QPA_PLATFORM=offscreen, so no display is required.
-name: ci
+name: verify bounded box selection
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [ci/verify-box-selection]
   workflow_dispatch:        # manual runs from the Actions tab
 
 # A force-push to a PR branch cancels the now-obsolete run instead of
@@ -30,7 +30,11 @@ permissions:
 
 jobs:
   tests:
-    name: pytest (not slow)
+    name: pytest (not slow), batch ${{ matrix.batch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        batch: [0, 1, 2, 3, 4, 5]
     # In the private development repository Actions minutes are counted, and a
     # push to main has already passed both suites locally before it went up:
     # there the gate runs on pull requests (and by hand) only. The public
@@ -45,11 +49,17 @@ jobs:
           python-version: "3.12"
 
       - name: System packages
-        # libegl/libgl + the xcb set: what PySide6 needs to even load its
-        # platform plugins on a bare runner (same list as release.yml).
+        timeout-minutes: 3
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
+          # The mirror's resolver failed during this one-off verification.
+          # This archive address was independently resolved on 2026-11-12;
+          # HTTPS certificates and apt's package hashes still verify downloads.
+          if ! timeout 5 getent ahostsv4 archive.ubuntu.com; then
+            printf '%s\n' '185.125.190.83 archive.ubuntu.com' | sudo tee -a /etc/hosts
+          fi
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt
+          sudo apt-get -o Acquire::Retries=0 -o Acquire::http::Timeout=20 \
+            -o Acquire::https::Timeout=20 install -y --no-install-recommends \
             libegl1 libgl1 libxkbcommon-x11-0 \
             libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0
 
@@ -72,4 +82,21 @@ jobs:
         # scripts/pytest_batches.py).
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python scripts/pytest_batches.py -m "not slow" tests
+          TEST_BATCH: ${{ matrix.batch }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          # Exactly the upstream runner's six interleaved file batches,
+          # executed on separate runners to verify the full suite in parallel.
+          files = sorted(str(p) for p in Path("tests").glob("test_*.py"))
+          chunk = files[int(os.environ["TEST_BATCH"])::6]
+          result = subprocess.run([
+              sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+              "-m", "not slow", *chunk,
+          ])
+          raise SystemExit(result.returncode)
+          PY
